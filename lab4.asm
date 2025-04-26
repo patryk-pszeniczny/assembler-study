@@ -26,12 +26,12 @@ equ rr:r15              \ rejestr rozkazu
 
 \ ----- Wartości początkowe rejestrów -----
 accept cs:3456h         \ ustawienie CS
-accept ip:FFFFh         \ ustawienie IP
+accept ip:0000h         \ ustawienie IP
 accept cx:5678h         \ ustawienie CX
 accept ax:7000h         \ ustawienie AX
 accept bx:7001h         \ ustawienie BX
-accept cx:7002h         \ ponowne ustawienie CX (korekta)
-accept dx:7003h         \ ustawienie DX
+accept cx:0001h         \ ponowne ustawienie CX (korekta)
+accept dx:0005h         \ ustawienie DX
 accept ss:4457h         \ ustawienie SS (stos)
 accept sp:0000h         \ ustawienie SP (stos)
 
@@ -56,16 +56,12 @@ accept sp:0000h         \ ustawienie SP (stos)
 \ INC = 8, DEC = 9, PUSH = A, POP = B, XCHG = C
 
 \ ----- Zawartość pamięci RAM -----
-dw 4455Fh:
+dw 34560h:
+	9000h,   \ XCHG AX/BX
     6E00h,   \ NOP
-    72FEh,   \ JC - 2
     4900h,   \ DEC CX
-    74FEh,   \ JZ + 2
-    5A00h,   \ POP DX
-    7101h,   \ JNO + 2
-    9000h,   \ XCHG AX/BX
-    4000h,   \ INC AX
-    5300h    \ PUSH BX
+    74FDh,   \ JZ - X
+    5A00h   \ POP DX
 
 \ ----- Obszar stosu -----
 dw 44570h:12, 23, 34, 45 \ początkowe dane na stosie
@@ -138,33 +134,46 @@ roz_jc_wyk
     {cjp not rm_c,zapis_powrotny;}           \ skok, jeśli CF = 1 (przeniesienie)
     {jmap wykonaj_j;}
 
-roz_jz_wyk
-    {load rm,flags;}
-    {cjp not rm_z,zapis_powrotny;}           \ skok, jeśli ZF = 1 (zero)
-    {jmap wykonaj_j;}
-
 roz_jno_wyk
     {load rm,flags;}
     {cjp rm_v,zapis_powrotny;}               \ brak skoku, jeśli OF = 1 (przepełnienie)
     {jmap wykonaj_j;}
 
+roz_jz_wyk
+    {load rm,rn;}
+    {cjp not rm_z,zapis_powrotny;}           \ skok, jeśli ZF = 1 (zero)
+
+\inaczej bedzie skok
+ {and rq,rr,00FFh;}\wydzielenie delta_ip
+ {and nil,rq,0080h;fl;}\spr czy skok do przodu lub tylu
+ {cjp rm_z,dodatnia;}\dla dodatniego delta_ip omjamy nastepna linie
+ {or rq,rr,FF00h;}\dla ujemnego delta_ip
+dodatnia
+ {add ip,ip,rq,z;}
+ {jmap odczyt_rozkazu;}
+
+
 wykonaj_j
     {and rq,rr,00FFh;}                      \ wyodrębnienie delta IP
     {and nil,rq,0080h;fl;}
     {cjp rm_z,dodatnia_j;}
-	{or rq, rq, ff00h;}
-	{add ip, ip, rq, z; fl;}
-	{cjp rm_z, modyf_cs_j;}
-	{jmap zapis_powrotny;}
+    {cjp not rm_z, ujemna_j;}
+	
+ujemna_j
+	{or rq, rq, FF00h;}
+	{add ip, ip, rq, z;}
+	{cjp rm_z,modyf_cs_j;}
+	{jmap odczyt_rozkazu;}
 	
 dodatnia_j
     {add ip,ip,rq,z;fl;}                    \ skok o delta IP
     {cjp rm_z,modyf_cs_j;}
-    {jmap zapis_powrotny;}
+    {jmap odczyt_rozkazu;}
 
 modyf_cs_j
     {add cs,cs,1000h,z;}                    \ zmiana segmentu
-    {jmap zapis_powrotny;}
+    {cjs nz,obadrfiz;}
+    {jmap odczyt_rozkazu;}
 
 roz_pop_dx_wyk
     \ Przygotowanie adresu stosu
