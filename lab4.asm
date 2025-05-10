@@ -56,12 +56,17 @@ accept sp:0000h         \ ustawienie SP (stos)
 \ INC = 8, DEC = 9, PUSH = A, POP = B, XCHG = C
 
 \ ----- Zawartość pamięci RAM -----
+\dw 34560h:
+\	9000h,   \ XCHG AX/BX
+\    6E00h,   \ NOP
+\    4900h,   \ DEC CX
+\    74FDh,   \ JZ - X
+\    5A00h   \ POP DX
 dw 34560h:
-	9000h,   \ XCHG AX/BX
-    6E00h,   \ NOP
+	6E00h,   \ NOP
+    5A00h,   \ POP DX
     4900h,   \ DEC CX
-    74FDh,   \ JZ - X
-    5A00h   \ POP DX
+    74FDh   \ JZ - X
 
 \ ----- Obszar stosu -----
 dw 44570h:12, 23, 34, 45 \ początkowe dane na stosie
@@ -109,7 +114,9 @@ roz_nop__dek2_wyk
     {jmap zapis_powrotny;}
 
 roz_dec_cx_wyk
-    {dec cx;}
+	{load rm, rn;}
+    {dec cx;f1;cem_c;}
+    {load rn, rm;}
     {jmap zapis_powrotny;}
 
 roz_xchg_ax_wyk
@@ -130,12 +137,12 @@ roz_push_bx_wyk
     {jmap omin;}
 
 roz_jc_wyk
-    {load rm,flags;}
+    {load rm, rn;}
     {cjp not rm_c,zapis_powrotny;}           \ skok, jeśli CF = 1 (przeniesienie)
     {jmap wykonaj_j;}
 
 roz_jno_wyk
-    {load rm,flags;}
+    {load rm, rn;} 							 \brany jest pod uwagę rejestr znaczników programisty rn
     {cjp rm_v,zapis_powrotny;}               \ brak skoku, jeśli OF = 1 (przepełnienie)
     {jmap wykonaj_j;}
 
