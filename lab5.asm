@@ -28,8 +28,8 @@ equ rr:r15              \ rejestr rozkazu
 accept cs:3456h         \ ustawienie CS
 accept ip:0000h         \ ustawienie IP
 accept cx:5678h         \ ustawienie CX
-accept ax:AA77h         \ ustawienie AX
-accept bx:7001h         \ ustawienie BX
+accept ax:F1A5h         \ ustawienie AX
+accept bx:0024h         \ ustawienie BX
 accept cx:0001h         \ ponowne ustawienie CX (korekta)
 accept dx:0005h         \ ustawienie DX
 accept ss:4457h         \ ustawienie SS (stos)
@@ -68,7 +68,13 @@ accept sp:0000h         \ ustawienie SP (stos)
 \   5A00h,   \ POP DX
 \    4900h,   \ DEC CX
 \    74FDh   \ J
-dw 34560h: 34AFh, 2500h,D27AH
+dw 34560h:
+6E00h, \ NOP
+9000h, \ XCHG AX,BX
+3408h, \ XOR 8h
+2500h, \ AND 00F0h
+00F0h,
+74FBh  \ JZ
 
 \ XOR AL(0XXX) ACC, Data8     34XX     W=0
 \ AND AX(0XXX) ACC, Data16    25XX     W=1
@@ -93,7 +99,6 @@ odczyt_rozkazu
     {mov rq,ip;}
     {cjs nz,obadrfiz;}                       \ zamiana adresu logicznego na fizyczny
     {and nil,pom1,pom1;oey;ewl;}             \ wystawienie dolnego słowa adresu
-    {and nil,pom2,pom2;oey;ewh;}             \ wystawienie górnego słowa adresu
     {R;mov rr,bus_d;cjp rdm,cp;}             \ odczyt rozkazu z RAM
 
     \ Dekodowanie rozkazu
@@ -206,33 +211,31 @@ roz_pop_dx_wyk
     {jmap zapis_powrotny;}
 
 roz_xor_al_wyk
-	{and pom1,rr,00FFh;}   	\w pom1 na 8 mlodszych bitach data8
-	{xor pom2,pom2,pom2;}	\zerowanie pom2
-	{mov pom2,ax;}	     	\kopia ax do pom2
-	{and pom2,pom2,FF00h;}  \(AH)00 h w pom2
-	{and ax,ax,00FFh;}      \ 00(AL)h w ax
-	{push nz,7;}			\przesuniecie o 8 bitow w strone starszych	
-		{sll ax;}				\AL
-		{sll pom1;}				\pom1(czyli data8)
-	{rfct;}
-	{load rm,z;}		
-	{xor ax,ax,pom1;fl;cem_v;cem_c;}
-	\w bitach overflow i carry w rej znacznikow powinny pozostac zera
-	\chociaz i tak nie ma szans, ze beda ustawione operacja xor.
-	{load rn,rm;}
-	{push nz,7;}			\przesuniecie o 8 bitow w strone mlodszych
-		{srl ax;}				\AL
-	{rfct;}
-	{or ax,ax,pom2;}		\dolaczenie do AL wartosci z AH;  (AH)(AL)=AX
-	{jmap zapis_powrotny;}
+	{and pom1,rr,00FFh;}       \ Wydzielenie młodszych 8 bitów z rr – trafiają one do pom1 (czyli mamy AL)
+	{xor pom2,pom2,pom2;}      \ Zerowanie rejestru pom2
+	{mov pom2,ax;}             \ Kopiowanie całego rejestru ax do pom2 (czyli zawiera AH i AL)
+	{and pom2,pom2,FF00h;}     \ Wydzielenie starszego bajtu (AH) z ax i zapis do pom2
+	{and ax,ax,00FFh;}         \ Zostawiamy tylko AL w ax, czyli zerujemy AH
+	{push nz,7;}               \ Przygotowanie przesunięcia o 8 bitów w lewo (czyli pomnożenie przez 256)
+	    {sll ax;}              \ Przesunięcie ax w lewo – przemieszczenie AL na miejsce AH
+	    {sll pom1;}            \ To samo dla pom1 (czyli też przeniesienie AL do AH)
+	{rfct;}                    \ Koniec pętli/pakietu przesunięć (restore flags & control token)
+	{load rm,z;}               \ Załadowanie adresu z do rm (rejestr pamięci)
+	{xor ax,ax,pom1;fl;cem_v;cem_c;} \ XOR pomiędzy ax i pom1, wynik w ax, aktualizacja znaczników
+	                               \ (ale overflow i carry będą i tak zerowe dla XOR)
+	{load rn,rm;}              \ Załaduj wynik z rm do rn (do dalszego zapisu)
+	{push nz,7;}               \ Przygotowanie do przesunięcia o 8 bitów w PRAWO (czyli dzielenie przez 256)
+	    {srl ax;}              \ Przesunięcie w prawo – przywracamy AL na miejsce
+	{rfct;}                    \ Koniec pakietu przesunięć
+	{or ax,ax,pom2;}           \ Doklejenie AH z pom2 do AL – przywracamy pełne AX (AH:AL)
+	{jmap zapis_powrotny;}     \ Skok do procedury zapisującej wynik do pamięci
+
 
 roz_and_ax_wyk
-	{add ip,ip,1,z;fl;}
-	{cjp rm_z,modyf_css;}
-	{jmap odczyt_drugiej_komorki;}
-	
-modyf_css
-	{add cs,cs,1000h,z;}
+	{add ip,ip,1,z;fl;}        \ Przesunięcie wskaźnika instrukcji o 1 (kolejny bajt), aktualizacja znaczników
+	{cjp rm_z,modyf_css;}      \ Jeśli bit `rm_z` ustawiony, to skocz do procedury modyfikującej segment `cs`
+	{jmap odczyt_drugiej_komorki;} \ Skok do procedury odczytującej drugą komórkę z RAM
+
 	
 odczyt_drugiej_komorki \operacja and 2 bajtowa
 	{mov pom1,cs;}
@@ -250,7 +253,7 @@ odczyt_drugiej_komorki \operacja and 2 bajtowa
 	{xor pom2,pom2,pom2;}\zerowanie pom2
 	{and pom2,pom1,00FFh;}\wydzielenie 8 mlodszych bitow
 	{and pom1,pom1,FF00h;}\wydzielenie 8 starszych bitow
-	{push nz,7;}		\
+	{push nz,7;}		
 		{sll pom2;}			\przesuwamy pom2 w lewo o 8 bitow
 		{srl pom1;}			\przesuwamy pom1 w prawo o 8 bitow
 	{rfct;}
@@ -262,7 +265,9 @@ odczyt_drugiej_komorki \operacja and 2 bajtowa
 	\chociaz i tak nie ma szans, ze beda ustawione operacja xor.
 	{load rn,rm;}
 	{jmap zapis_powrotny;}
-
+	
+modyf_css
+	{add cs,cs,1000h,z;}
 
 modyf_ss_pop
     {add ss,ss,1000h,z;}
