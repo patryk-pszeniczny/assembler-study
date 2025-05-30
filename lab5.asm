@@ -28,8 +28,8 @@ equ rr:r15              \ rejestr rozkazu
 accept cs:3456h         \ ustawienie CS
 accept ip:0000h         \ ustawienie IP
 accept cx:5678h         \ ustawienie CX
-accept ax:F1A5h         \ ustawienie AX
-accept bx:0024h         \ ustawienie BX
+accept ax:7000h         \ ustawienie AX
+accept bx:7001h         \ ustawienie BX
 accept cx:0001h         \ ponowne ustawienie CX (korekta)
 accept dx:0005h         \ ustawienie DX
 accept ss:4457h         \ ustawienie SS (stos)
@@ -69,12 +69,12 @@ accept sp:0000h         \ ustawienie SP (stos)
 \    4900h,   \ DEC CX
 \    74FDh   \ J
 dw 34560h:
-6E00h, \ NOP
-9000h, \ XCHG AX,BX
-3408h, \ XOR 8h
-2500h, \ AND 00F0h
-00F0h,
-74FBh  \ JZ
+		6E00h, \ NOP
+		9000h, \ XCHG AX,BX
+		3408h, \ XOR 8h
+		2500h, \ AND 00F0h
+		00F0h,
+		74FBh  \ JZ
 
 \ XOR AL(0XXX) ACC, Data8     34XX     W=0
 \ AND AX(0XXX) ACC, Data16    25XX     W=1
@@ -99,6 +99,7 @@ odczyt_rozkazu
     {mov rq,ip;}
     {cjs nz,obadrfiz;}                       \ zamiana adresu logicznego na fizyczny
     {and nil,pom1,pom1;oey;ewl;}             \ wystawienie dolnego słowa adresu
+    {and nil,pom2,pom2;oey;ewh;}             \ wystawienie górnego słowa adresu
     {R;mov rr,bus_d;cjp rdm,cp;}             \ odczyt rozkazu z RAM
 
     \ Dekodowanie rozkazu
